@@ -2,10 +2,10 @@ name: Go
 
 on:
   push:
-    branches: [ $default-branch ]
-  pull_request:
-    branches: [ $default-branch ]
-
+    branches:
+      - master
+    tags:
+      - v*
 jobs:
 
   build:
