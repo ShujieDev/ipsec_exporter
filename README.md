@@ -1,14 +1,14 @@
-# IPsec Exporter ![Test](https://github.com/dennisstritzke/ipsec_exporter/workflows/Test/badge.svg)
+# IPsec Exporter
 Prometheus exporter for ipsec metrics, written in Go.
+(forked from https://github.com/dennisstritzke/ipsec_exporter)
 
 ## Functionality
 The IPsec exporter is determining the state of the configured IPsec tunnels via the following procedure.
-1. Starting up the `ipsec.conf` is read. All tunnels configured via the `conn` keyword are observed.
-1. If the `/metrics` endpoint is queried, the exporter calls `ipsec status <tunnel name>` for each configured
-connection. The output is parsed.
-    * If the output contains `ESTABLISHED`, we assume that only the connection is up.
-    * If the output contains `INSTALLED`, we assume that the tunnel is up and running.
-    * If the output contains `no match`, we assume that the connection is down.
+1. Starting up with requesting `list-conn` in the vici api. All tunnels configured are added to a list.
+2. If the `/metrics` endpoint is queried, the exporter calls `list-sa`.
+    * If the IKE_SA has state `ESTABLISHED`, we assume that only the connection is up.
+    * If the CHILD_SA has state `INSTALLED`, we assume that the tunnel is up and running.
+    * If the tunnel can not be found from the `list-sa` call, we assume that the connection is down.
 
 ## Value Definition
 | Metric | Value | Description |

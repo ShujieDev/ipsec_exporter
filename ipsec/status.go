@@ -2,9 +2,9 @@ package ipsec
 
 import (
 	"github.com/prometheus/common/log"
-	"os/exec"
-	"regexp"
 	"strconv"
+	"github.com/strongswan/govici/vici"
+	"fmt"
 )
 
 type status struct {
@@ -26,25 +26,7 @@ const (
 	ignored               connectionStatus = 4
 )
 
-type statusProvider interface {
-	statusOutput(tunnel connection) (string, error)
-}
-
-type cliStatusProvider struct {
-}
-
-func (c *cliStatusProvider) statusOutput(tunnel connection) (string, error) {
-	cmd := exec.Command("ipsec", "statusall", tunnel.name)
-	out, err := cmd.Output()
-
-	if err != nil {
-		return "", err
-	}
-
-	return string(out), nil
-}
-
-func queryStatus(ipSecConfiguration *Configuration, provider statusProvider) map[string]*status {
+func queryStatus(ipSecConfiguration *Configuration) map[string]*status {
 	statusMap := map[string]*status{}
 
 	for _, connection := range ipSecConfiguration.tunnel {
@@ -54,57 +36,73 @@ func queryStatus(ipSecConfiguration *Configuration, provider statusProvider) map
 				status: ignored,
 			}
 			continue
-		}
-
-		if out, err := provider.statusOutput(connection); err != nil {
-			log.Warnf("Unable to retrieve the status of tunnel '%s'. Reason: %v", connection.name, err)
-			statusMap[connection.name] = &status{
-				up:     false,
-				status: unknown,
-			}
 		} else {
 			statusMap[connection.name] = &status{
-				up:         true,
-				status:     extractStatus([]byte(out)),
-				bytesIn:    extractIntWithRegex(out, `([[0-9]+) bytes_i`),
-				bytesOut:   extractIntWithRegex(out, `([[0-9]+) bytes_o`),
-				packetsIn:  extractIntWithRegex(out, `bytes_i \(([[0-9]+) pkts`),
-				packetsOut: extractIntWithRegex(out, `bytes_o \(([[0-9]+) pkts`),
+				up:     false,
+				status: down,
 			}
 		}
 	}
+
+        session, err := vici.NewSession()
+        if err != nil {
+                fmt.Println(err)
+		return statusMap
+        }
+        defer session.Close()
+
+        m := vici.NewMessage()
+
+        ms, err := session.StreamedCommandRequest("list-sas", "list-sa", m)
+        if err != nil {
+                fmt.Println(err)
+		return statusMap
+        }
+
+        for _, n := range ms.Messages() {
+                if n.Err() != nil {
+			log.Warnf("Unable to retrieve the status of Strongswan. Reason: %v",  err)
+                }
+                if len(n.Keys()) == 0 {
+                }
+                for _, k := range n.Keys() {
+                        p := n.Get(k).(*vici.Message)
+
+			statusMap[k] = &status{
+				up:     true,
+				status: extractStatus( fmt.Sprintf("%s", p.Get("state")) ),
+			}
+
+                        f := p.Get("child-sas").(*vici.Message)
+                        for _, j := range f.Keys() {
+                                t := f.Get(j).(*vici.Message)
+				bytes_in, _ := strconv.Atoi(fmt.Sprintf("%s", t.Get("bytes-in")))
+				bytes_out, _ := strconv.Atoi(fmt.Sprintf("%s", t.Get("bytes-out")))
+				packets_in, _ := strconv.Atoi(fmt.Sprintf("%s", t.Get("packets-in")))
+				packets_out, _ := strconv.Atoi(fmt.Sprintf("%s", t.Get("packets-out")))
+			        statusMap[k] = &status{
+					up:         true,
+					status:     extractStatus( fmt.Sprintf("%s", t.Get("state")) ),
+					bytesIn:	bytes_in,
+					bytesOut:	bytes_out,
+					packetsIn:	packets_in,
+					packetsOut:	packets_out,
+			        }
+                        }
+                }
+        }
 
 	return statusMap
 }
 
-func extractStatus(statusLine []byte) connectionStatus {
-	noMatchRegex := regexp.MustCompile(`no match`)
-	tunnelEstablishedRegex := regexp.MustCompile(`{[0-9]+}: *INSTALLED`)
-	connectionEstablishedRegex := regexp.MustCompile(`[[0-9]+]: *ESTABLISHED`)
+func extractStatus(status string) connectionStatus {
 
-	if connectionEstablishedRegex.Match(statusLine) {
-		if tunnelEstablishedRegex.Match(statusLine) {
-			return tunnelInstalled
-		} else {
-			return connectionEstablished
-		}
-	} else if noMatchRegex.Match(statusLine) {
-		return down
+	if status == "ESTABLISHED" {
+		return connectionEstablished
+	} else if status == "INSTALLED" {
+		return tunnelInstalled
+	} else {
+		return unknown
 	}
 
-	return unknown
-}
-
-func extractIntWithRegex(input string, regex string) int {
-	re := regexp.MustCompile(regex)
-	match := re.FindStringSubmatch(input)
-	if len(match) >= 2 {
-		i, err := strconv.Atoi(match[1])
-		if err != nil {
-			return 0
-		}
-		return i
-	}
-
-	return 0
 }

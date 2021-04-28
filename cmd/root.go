@@ -2,13 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/dennisstritzke/ipsec_exporter/exporter"
+	"github.com/netnod/ipsec_exporter/exporter"
 	"github.com/spf13/cobra"
 	"os"
 )
 
 const (
-	flagIpsecConfigFile  = "config-path"
 	flagWebListenAddress = "web.listen-address"
 )
 
@@ -22,10 +21,6 @@ var RootCmd = &cobra.Command{
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&exporter.IpSecConfigFile, flagIpsecConfigFile,
-		"/etc/ipsec.conf",
-		"Path to the ipsec config file.")
-
 	RootCmd.PersistentFlags().StringVar(&exporter.WebListenAddress, flagWebListenAddress,
 		"0.0.0.0:9536",
 		"Address on which to expose metrics.")

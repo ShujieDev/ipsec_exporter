@@ -1,7 +1,7 @@
 package exporter
 
 import (
-	"github.com/dennisstritzke/ipsec_exporter/ipsec"
+	"github.com/netnod/ipsec_exporter/ipsec"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
@@ -15,7 +15,7 @@ var ipSecConfiguration *ipsec.Configuration
 
 func Serve() {
 	var err error
-	ipSecConfiguration, err = ipsec.NewConfiguration(IpSecConfigFile)
+	ipSecConfiguration, err = ipsec.NewConfiguration()
 	if err != nil {
 		log.Fatal(err)
 		return
